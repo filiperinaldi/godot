@@ -46,6 +46,14 @@
 // Documentation specifies 72 when get DPI is not supported. Using it for errors as well
 #define INVALID_DPI 72
 
+#define WL_ARRAY_FOR_EACH_U32(pos, array) \
+	_WL_ARRAY_FOR_EACH(pos, array, const uint32_t *)
+
+#define _WL_ARRAY_FOR_EACH(pos, array, type) \
+	for (pos = (type)(array)->data; \
+		(const uint8_t *) pos < ((const uint8_t *) (array)->data + (array)->size); \
+		pos++)
+
 class DisplayServerWayland : public DisplayServer {
 private:
 	_THREAD_SAFE_CLASS_
@@ -69,6 +77,9 @@ private:
 	static void h_xdg_output_description(void *data, struct zxdg_output_v1 *zxdg_output_v1, const char *description);
 	static void h_wl_surface_enter(void *data, struct wl_surface *wl_surface, struct wl_output *output);
 	static void h_wl_surface_leave(void *data, struct wl_surface *wl_surface, struct wl_output *output);
+	static void h_xdg_toplevel_configure(void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height, struct wl_array *states);
+	static void h_xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel);
+	static void h_xdg_toplevel_configure_bounds(void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height);
 
 	// Wayland listeners
 	static constexpr struct wl_registry_listener registry_listener = {
@@ -108,6 +119,12 @@ private:
 	static constexpr struct wl_surface_listener wl_surface_listener = {
 		.enter = h_wl_surface_enter,
 		.leave = h_wl_surface_leave,
+	};
+
+	static constexpr struct xdg_toplevel_listener xdg_toplevel_listener = {
+		.configure = h_xdg_toplevel_configure,
+		.close = h_xdg_toplevel_close,
+		.configure_bounds = h_xdg_toplevel_configure_bounds,
 	};
 
 	struct WScreen {
@@ -150,6 +167,11 @@ private:
 		Vector2i position;
 		Vector2i resolution;
 		Size2i size;
+		Size2i size_min = Size2i(1, 1);
+		Size2i size_max = Size2i(INT32_MAX, INT32_MAX);
+		Size2i bounds; // Define max recommended screen size a window can occupy
+
+		Callable rect_changed_callback;
 
 		// Wayland related
 		struct wl_surface *wl_surface = nullptr;
@@ -168,6 +190,8 @@ private:
 	DisplayServer::WindowID _window_create(WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution);
 	void _window_destroy(WWindow *window);
 	WScreen *_get_screen_from_id(int p_screen) const;
+	WWindow *_get_window_from_id(int p_window) const;
+	static void _window_set_size(WWindow *window, Size2i size);
 
 public:
 	static DisplayServer *create(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error);
@@ -182,7 +206,6 @@ public:
 	virtual void swap_buffers() override;
 	bool has_feature(Feature p_feature) const override;
 	void window_set_title(const String &p_title, WindowID p_window = MAIN_WINDOW_ID) override;
-	Size2i window_get_size(WindowID p_window = MAIN_WINDOW_ID) const override;
 	int screen_get_dpi(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	int get_screen_count() const override;
 	int get_primary_screen() const override;
@@ -190,12 +213,19 @@ public:
 	Size2i screen_get_size(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	Rect2i screen_get_usable_rect(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	float screen_get_refresh_rate(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
+	void window_set_max_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
+	void window_set_min_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
+	void window_set_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
+	Size2i window_get_max_size(WindowID p_window = MAIN_WINDOW_ID) const override;
+	Size2i window_get_min_size(WindowID p_window = MAIN_WINDOW_ID) const override;
+	Size2i window_get_size(WindowID p_window = MAIN_WINDOW_ID) const override;
+	Size2i window_get_size_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override;
+	void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
 
 	/* Not implemented yet */
 	WindowID get_window_at_screen_position(const Point2i &p_position) const override { WARN_PRINT_ONCE("Not implemented"); return 0; }
 	void window_attach_instance_id(ObjectID p_instance, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	ObjectID window_get_attached_instance_id(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return ObjectID(); }
-	void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_window_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_input_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_input_text_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
@@ -206,12 +236,6 @@ public:
 	Point2i window_get_position_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return Point2i(); }
 	void window_set_position(const Point2i &p_position, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_transient(WindowID p_window, WindowID p_parent) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	void window_set_max_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	Size2i window_get_max_size(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return Size2i(); }
-	void window_set_min_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	Size2i window_get_min_size(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return Size2i(); }
-	void window_set_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	Size2i window_get_size_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return Size2i(); }
 	void window_set_mode(WindowMode p_mode, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	WindowMode window_get_mode(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return WINDOW_MODE_WINDOWED; }
 	bool window_is_maximize_allowed(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return false; }

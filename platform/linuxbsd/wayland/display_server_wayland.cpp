@@ -226,6 +226,52 @@ void DisplayServerWayland::h_wl_surface_leave(void *data, struct wl_surface *wl_
 	w->outputs.erase(output);
 }
 
+void DisplayServerWayland::h_xdg_toplevel_configure(void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height, struct wl_array *states) {
+	WWindow *window = (WWindow *)data;
+	window->pending_config = true;
+
+	DEBUG_LOG_WAYLAND("Wayland: xdg-toplevel Configure\n");
+	DEBUG_LOG_WAYLAND("Size: %dpx,%dpx\n", width, height);
+	DEBUG_LOG_WAYLAND("Size min: %dpx,%dpx\n", window->size_min.width, window->size_min.height);
+	DEBUG_LOG_WAYLAND("Size max: %dpx,%dpx\n", window->size_max.width, window->size_max.height);
+	DEBUG_LOG_WAYLAND("States (size:%zu):\n", states->size);
+
+	window->mode = WINDOW_MODE_WINDOWED;
+	const uint32_t *state;
+	WL_ARRAY_FOR_EACH_U32(state, states) {
+		DEBUG_LOG_WAYLAND("\tState: %d\n", *state);
+		switch (*state) {
+		case XDG_TOPLEVEL_STATE_MAXIMIZED:
+			window->mode = WINDOW_MODE_MAXIMIZED;
+			break;
+
+		case XDG_TOPLEVEL_STATE_FULLSCREEN:
+			window->mode = WINDOW_MODE_FULLSCREEN;
+			break;
+
+		default:
+			DEBUG_LOG_WAYLAND("Unhandled window state: %d\n", *state);
+			break;
+		}
+	}
+
+	_window_set_size(window, Size2i(width, height));
+}
+
+void DisplayServerWayland::h_xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel) {
+}
+
+void DisplayServerWayland::h_xdg_toplevel_configure_bounds(void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height) {
+	WWindow *window = (WWindow *)data;
+
+	if (width && height) {
+		window->pending_config = true;
+		window->bounds.width = width;
+		window->bounds.height = height;
+		print_line(vformat("Wayland: Got new bounds w:%d,h:%d", width, height));
+	}
+}
+
 DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution) {
 	WWindow *w = memnew(WWindow);
 	ERR_FAIL_NULL_V_MSG(w, INVALID_WINDOW_ID, "Wayland: Failed to allocate memory for window");
@@ -254,6 +300,7 @@ DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, 
 		_window_destroy(w);
 		ERR_FAIL_V_MSG(INVALID_WINDOW_ID, "Wayland: Failed to create top-level xdg surface");
 	}
+	xdg_toplevel_add_listener(w->xdg_toplevel, &xdg_toplevel_listener, w);
 
 	xdg_toplevel_set_title(w->xdg_toplevel, "Godot");
 	w->pending_config = true;
@@ -281,6 +328,28 @@ DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, 
 	}
 #endif
 
+	switch(p_mode) {
+	case WINDOW_MODE_WINDOWED:
+		break;
+
+	case WINDOW_MODE_MINIMIZED:
+		xdg_toplevel_set_minimized(w->xdg_toplevel);
+		break;
+
+	case WINDOW_MODE_MAXIMIZED:
+		DEBUG_LOG_WAYLAND("win create mode Maximised\n");
+		xdg_toplevel_set_maximized(w->xdg_toplevel);
+		break;
+
+	case WINDOW_MODE_FULLSCREEN:
+	case WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+		xdg_toplevel_set_fullscreen(w->xdg_toplevel, nullptr);
+		break;
+
+	default:
+		DEBUG_LOG_WAYLAND("Unknown window mode\n");
+	}
+
 	WindowID id = windows.find(nullptr);
 	if (id < 0)
 		id = windows.size();
@@ -305,6 +374,49 @@ void DisplayServerWayland::_window_destroy(WWindow *window) {
 	if (display.egl_manager)
 		display.egl_manager->window_destroy(window->egl_window);
 #endif
+}
+
+DisplayServerWayland::WWindow *DisplayServerWayland::_get_window_from_id(int p_window) const {
+	WWindow *w;
+	if ((p_window >= 0) &&
+		(p_window < windows.size()) &&
+		((w = windows[p_window]) != nullptr)) {
+		return w;
+	} else {
+		return nullptr;
+	}
+}
+
+void DisplayServerWayland::_window_set_size(WWindow *window, Size2i size) {
+	if ((size.width <= 0) || (size.height <= 0))
+		return;
+
+	Size2i new_size = Size2i();
+	new_size.width = MIN(MAX(size.width, window->size_min.width), window->size_max.width);
+	new_size.height = MIN(MAX(size.height, window->size_min.height), window->size_max.height);
+
+	if (new_size == window->size)
+		return;
+
+	window->size = new_size;
+	xdg_surface_set_window_geometry(window->xdg_surface, 0, 0, window->size.width, window->size.height);
+
+#if defined(GLES3_ENABLED)
+	if (window->native) {
+		wl_egl_window_resize(window->native,
+			window->size.width,
+			window->size.height,
+			0,0);
+	}
+#endif
+
+	if (!window->rect_changed_callback.is_null()) {
+		Variant rect = Rect2i(Point2i(), window->size);
+		Variant *rectp = &rect;
+		Variant ret;
+		Callable::CallError ce;
+		window->rect_changed_callback.callp((const Variant **)&rectp, 1, ret, ce);
+	}
 }
 
 DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error) {
@@ -340,7 +452,6 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 	WindowID window_id = _window_create(p_mode, p_vsync_mode, p_flags, p_position, p_resolution);
 	ERR_FAIL_COND_MSG(window_id == INVALID_WINDOW_ID, "Wayland: Failed to create main window");
 
-	xdg_toplevel_set_minimized(current_window->xdg_toplevel);
 	r_error = OK;
 }
 
@@ -403,16 +514,22 @@ void DisplayServerWayland::window_set_title(const String &p_title, WindowID p_wi
 		xdg_toplevel_set_title(w->xdg_toplevel, p_title.utf8().get_data());
 }
 
-Size2i DisplayServerWayland::window_get_size(WindowID p_window) const {
-	_THREAD_SAFE_METHOD_
+int DisplayServerWayland::_get_screen_id_from_window(const WWindow *window) const {
+	int screen = SCREEN_UNKNOWN;
 
-	WWindow *w;
+	if (!window || window->outputs.is_empty())
+		return SCREEN_UNKNOWN;
 
-	if ((p_window >= 0) && (p_window < windows.size()) && ((w = windows[p_window]) != nullptr)) {
-		return w->size;
+	// A window can span multiple screens. Pick the "earliest" screen the
+	// window has entered.
+	for (unsigned int i = 0; i < display.screens.size(); i++) {
+		if (display.screens[i]->output == window->outputs[0]) {
+			screen = i;
+			break;
+		}
 	}
 
-	return Size2i();
+	return screen;
 }
 
 DisplayServerWayland::WScreen *DisplayServerWayland::_get_screen_from_id(int p_screen) const {
@@ -500,6 +617,77 @@ float DisplayServerWayland::screen_get_refresh_rate(int p_screen) const  {
 
 	WScreen *s = _get_screen_from_id(p_screen);
 	return !s ? -1 : float(s->refresh_mHz) / 1000.0;
+}
+
+void DisplayServerWayland::window_set_min_size(const Size2i p_size, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	if (w &&
+		(p_size.width > 0) &&
+		(p_size.height > 0) &&
+		(p_size.width <= w->size_max.width) &&
+		(p_size.height <= w->size_max.height)) {
+		w->size_min = p_size;
+		xdg_toplevel_set_min_size(w->xdg_toplevel, p_size.width, p_size.height);
+	}
+}
+
+void DisplayServerWayland::window_set_max_size(const Size2i p_size, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	if (w &&
+		(p_size.width > 0) &&
+		(p_size.height > 0) &&
+		(p_size.width >= w->size_min.width) &&
+		(p_size.height >= w->size_min.height)) {
+		w->size_max = p_size;
+		xdg_toplevel_set_max_size(w->xdg_toplevel, p_size.width, p_size.height);
+	}
+}
+
+void DisplayServerWayland::window_set_size(const Size2i p_size, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	if (w) {
+		_window_set_size(w, p_size);
+	}
+}
+
+Size2i DisplayServerWayland::window_get_max_size(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->size_max : Size2i();
+}
+
+Size2i DisplayServerWayland::window_get_min_size(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->size_min : Size2i();
+}
+
+Size2i DisplayServerWayland::window_get_size(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->size : Size2i();
+}
+
+Size2i DisplayServerWayland::window_get_size_with_decorations(WindowID p_window) const {
+	return window_get_size(p_window);
+}
+
+void DisplayServerWayland::window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	if (w) {
+		w->rect_changed_callback = p_callable;
+	}
 }
 
 DisplayServerWayland::~DisplayServerWayland() {
