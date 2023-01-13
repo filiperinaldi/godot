@@ -6,6 +6,7 @@
 	<description>
 		[DisplayServer] handles everything related to window management. This is separated from [OS] as a single operating system may support multiple display servers.
 		[b]Headless mode:[/b] Starting the engine with the [code]--headless[/code] [url=$DOCS_URL/tutorials/editor/command_line_tutorial.html]command line argument[/url] disables all rendering and window management functions. Most functions from [DisplayServer] will return dummy values in this case.
+		[b]Note on Wayland (Linux):[/b] Wayland support differs from X11 where many common desktop features are not part of the core Wayland specification (i.e. window decoration, get window position, check if a window is minimised).  Wayland compositors like Kwin (KDE), Mutter (Gnome) and others have their own protocols which are not compatible amongs them and are not currently supported by Godot.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -134,6 +135,7 @@
 			<return type="int" />
 			<description>
 				Returns index of the primary screen.
+				[b]Note:[/b] Wayland (Linux) always returns SCREEN_UNKNOWN as the core specification has no concept of primary screen.
 			</description>
 		</method>
 		<method name="get_screen_count" qualifiers="const">

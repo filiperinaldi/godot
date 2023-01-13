@@ -88,6 +88,21 @@ void DisplayServerWayland::h_wl_global_registry_global(void *data, struct wl_reg
 			name, &xdg_wm_base_interface, MIN(version, xdg_wm_base_interface.version));
 		xdg_wm_base_add_listener(display->xdg_wm_base, &xdg_wm_base_listener, display);
 
+	} else if (strcmp(interface, wl_output_interface.name) == 0) {
+		struct WScreen *screen = memnew(WScreen);
+		ERR_FAIL_NULL_MSG(screen, "Wayland: Failed to allocate screen");
+		screen->output_name = name;
+		screen->output = (struct wl_output *)wl_registry_bind(registry,
+			name, &wl_output_interface, MIN(version, wl_output_interface.version));
+		display->screens.push_back(screen);
+		wl_output_add_listener(screen->output, &wl_output_listener, screen);
+
+		screen->xdg_output = zxdg_output_manager_v1_get_xdg_output(display->xdg_output_manager, screen->output);
+		zxdg_output_v1_add_listener(screen->xdg_output, &xdg_output_listener, screen);
+
+	} else if (strcmp(interface, zxdg_output_manager_v1_interface.name) == 0) {
+		display->xdg_output_manager = (struct zxdg_output_manager_v1 *)wl_registry_bind(registry,
+			name, &zxdg_output_manager_v1_interface, MIN(version, zxdg_output_manager_v1_interface.version));
 	}
 #if defined(DEV_ENABLED)
 	else {
@@ -97,6 +112,22 @@ void DisplayServerWayland::h_wl_global_registry_global(void *data, struct wl_reg
 }
 
 void DisplayServerWayland::h_wl_global_registry_remove(void *data, struct wl_registry *registry, uint32_t name) {
+	WDisplay *display = (WDisplay *)data;
+
+	for (unsigned int i = 0; i < display->screens.size(); i++) {
+		if (display->screens[i]->output_name == name) {
+			// Destroy objects
+			zxdg_output_v1_destroy(display->screens[i]->xdg_output);
+			wl_output_destroy(display->screens[i]->output);
+
+			// Delete screen descriptor
+			memdelete(display->screens[i]);
+			display->screens.remove_at(i);
+
+			return;
+		}
+	}
+
 	DEBUG_LOG_WAYLAND("Ignoring removal of object 0x%08x\n", name);
 }
 
@@ -116,6 +147,85 @@ void DisplayServerWayland::h_wl_buffer_release(void *data, struct wl_buffer *wl_
 	wl_buffer_destroy(wl_buffer);
 }
 
+void DisplayServerWayland::h_wl_output_geometry(void *data, struct wl_output *wl_output, int32_t x, int32_t y, int32_t physical_width, int32_t physical_height, int32_t subpixel, const char *make, const char *model, int32_t transform) {
+	WScreen *screen = (WScreen *)data;
+
+	screen->pending_update = true;
+	screen->position.x = x;
+	screen->position.y = y;
+	screen->size_mm.width = physical_width;
+	screen->size_mm.height = physical_height;
+	screen->transform = transform;
+}
+
+void DisplayServerWayland::h_wl_output_mode(void *data, struct wl_output *wl_output, uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
+	WScreen *screen = (WScreen *)data;
+	if (flags & WL_OUTPUT_MODE_CURRENT) {
+		screen->pending_update = true;
+		screen->flags = flags;
+		screen->size_px.width = width;
+		screen->size_px.height = height;
+		screen->refresh_mHz = refresh;
+	}
+}
+
+void DisplayServerWayland::h_wl_output_done(void *data, struct wl_output *wl_output) {
+	WScreen *screen = (WScreen *)data;
+	screen->pending_update = false;
+}
+
+void DisplayServerWayland::h_wl_output_scale(void *data, struct wl_output *wl_output, int32_t factor) {
+	WScreen *screen = (WScreen *)data;
+	screen->pending_update = true;
+	screen->scale_factor = factor;
+}
+
+void DisplayServerWayland::h_wl_output_name(void *data, struct wl_output *wl_output, const char *name) {
+}
+
+void DisplayServerWayland::h_wl_output_description(void *data, struct wl_output *wl_output, const char *description) {
+}
+
+void DisplayServerWayland::h_xdg_output_logical_position(void *data, struct zxdg_output_v1 *zxdg_output_v1, int32_t x, int32_t y) {
+	WScreen *screen = (WScreen *)data;
+	screen->pending_update = true;
+	screen->logical_position.x = x;
+	screen->logical_position.y = y;
+}
+
+void DisplayServerWayland::h_xdg_output_logical_size(void *data, struct zxdg_output_v1 *zxdg_output_v1, int32_t width, int32_t height) {
+	WScreen *screen = (WScreen *)data;
+	screen->pending_update = true;
+	screen->logical_size_px.width = width;
+	screen->logical_size_px.height = height;
+}
+
+
+void DisplayServerWayland::h_xdg_output_done(void *data, struct zxdg_output_v1 *zxdg_output_v1) {
+	WScreen *screen = (WScreen *)data;
+	screen->pending_update = false;
+
+	DEV_ASSERT(screen->size_mm.width && screen->size_mm.height);
+	screen->dpi = (((screen->logical_size_px.width / (float(screen->size_mm.width) / 25.4f)) +
+				  (screen->logical_size_px.height / (float(screen->size_mm.height) / 25.4f))) / 2.0);
+}
+
+void DisplayServerWayland::h_xdg_output_name(void *data, struct zxdg_output_v1 *zxdg_output_v1, const char *name) {
+}
+
+void DisplayServerWayland::h_xdg_output_description(void *data, struct zxdg_output_v1 *zxdg_output_v1, const char *description) {
+}
+
+void DisplayServerWayland::h_wl_surface_enter(void *data, struct wl_surface *wl_surface, struct wl_output *output) {
+	WWindow *w = (WWindow *)data;
+	w->outputs.push_back(output);
+}
+
+void DisplayServerWayland::h_wl_surface_leave(void *data, struct wl_surface *wl_surface, struct wl_output *output) {
+	WWindow *w = (WWindow *)data;
+	w->outputs.erase(output);
+}
+
 DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution) {
 	WWindow *w = memnew(WWindow);
 	ERR_FAIL_NULL_V_MSG(w, INVALID_WINDOW_ID, "Wayland: Failed to allocate memory for window");
@@ -130,6 +240,7 @@ DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, 
 		_window_destroy(w);
 		ERR_FAIL_V_MSG(INVALID_WINDOW_ID, "Wayland: Failed to create surface");
 	}
+	wl_surface_add_listener(w->wl_surface, &wl_surface_listener, w);
 
 	w->xdg_surface = xdg_wm_base_get_xdg_surface(display.xdg_wm_base, w->wl_surface);
 	if (!w->xdg_surface) {
@@ -211,6 +322,7 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 
 	ERR_FAIL_NULL_MSG(display.compositor, "Wayland: Failed to acquire compositor");
 	ERR_FAIL_NULL_MSG(display.xdg_wm_base, "Wayland: Failed to acquire xdg_wm_base");
+	ERR_FAIL_NULL_MSG(display.xdg_output_manager, "Wayland: Failed to acquire xdg_output_manager");
 
 #if defined(GLES3_ENABLED)
 	if (p_rendering_driver == "opengl3") {
@@ -228,6 +340,7 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 	WindowID window_id = _window_create(p_mode, p_vsync_mode, p_flags, p_position, p_resolution);
 	ERR_FAIL_COND_MSG(window_id == INVALID_WINDOW_ID, "Wayland: Failed to create main window");
 
+	xdg_toplevel_set_minimized(current_window->xdg_toplevel);
 	r_error = OK;
 }
 
@@ -302,6 +415,93 @@ Size2i DisplayServerWayland::window_get_size(WindowID p_window) const {
 	return Size2i();
 }
 
+DisplayServerWayland::WScreen *DisplayServerWayland::_get_screen_from_id(int p_screen) const {
+	if (display.screens.is_empty())
+		return nullptr;
+
+	if (p_screen == SCREEN_OF_MAIN_WINDOW) {
+		// Check if main window has assigned outputs
+		if (windows[MAIN_WINDOW_ID]->outputs.is_empty())
+			return nullptr;
+
+		// A window can span multiple screens. Pick the "earliest" screen a
+		// window has entered.
+		p_screen = -1;
+		for (unsigned int i = 0; i < display.screens.size(); i++) {
+			if (display.screens[i]->output == windows[MAIN_WINDOW_ID]->outputs[0]) {
+				p_screen = i;
+				break;
+			}
+		}
+
+		return p_screen == -1 ? nullptr : display.screens[p_screen];
+	}
+
+	if ((p_screen < 0) || (p_screen >= display.screens.size()))
+		return nullptr;
+	else
+		return display.screens[p_screen];
+}
+
+int DisplayServerWayland::screen_get_dpi(int p_screen) const {
+	_THREAD_SAFE_METHOD_
+
+	WScreen *s = _get_screen_from_id(p_screen);
+	return s ? s->dpi : INVALID_DPI;
+}
+
+int DisplayServerWayland::get_screen_count() const {
+	return display.screens.size();
+}
+
+int DisplayServerWayland::get_primary_screen() const {
+	// There are no generic Wayland protocols to find out the primary screen
+	return SCREEN_UNKNOWN;
+}
+
+Point2i DisplayServerWayland::screen_get_position(int p_screen) const {
+	_THREAD_SAFE_METHOD_
+
+	WScreen *s = _get_screen_from_id(p_screen);
+
+	// The API has no mechanism to return an error. For now, return (0,0) like other
+	// DisplayServer implementations.
+	if (!s)
+		return Point2i();
+	else
+		return s->position;
+}
+
+Size2i DisplayServerWayland::screen_get_size(int p_screen) const {
+	_THREAD_SAFE_METHOD_
+
+	WScreen *s = _get_screen_from_id(p_screen);
+
+	// The API has no mechanism to return an error. For now, return (0,0) like other
+	// DisplayServer implementations.
+	if (!s)
+		return Size2i();
+	else
+		return s->size_px;
+}
+
+Rect2i DisplayServerWayland::screen_get_usable_rect(int p_screen) const  {
+	// Wayland core protocols have no mechanism to get the usable rect from an
+	// output. Similar to the X11 implementation, this function will return the
+	// whole screen size. On error (invalid screen) return (0,0,0,0).
+	_THREAD_SAFE_METHOD_
+
+	WScreen *s = _get_screen_from_id(p_screen);
+	return s ? Rect2i(s->logical_position, s->logical_size_px) : Rect2i();
+}
+
+float DisplayServerWayland::screen_get_refresh_rate(int p_screen) const  {
+	_THREAD_SAFE_METHOD_
+
+	WScreen *s = _get_screen_from_id(p_screen);
+	return !s ? -1 : float(s->refresh_mHz) / 1000.0;
+}
+
 DisplayServerWayland::~DisplayServerWayland() {
 	if (display.compositor)
 		wl_compositor_destroy(display.compositor);
@@ -311,6 +511,16 @@ DisplayServerWayland::~DisplayServerWayland() {
 	for (unsigned int i = 0; i < windows.size(); i++) {
 		_window_destroy(windows[i]);
 	}
+
+	for (unsigned int i = 0; i < display.screens.size(); i++) {
+		if (display.screens[i]->xdg_output)
+			zxdg_output_v1_destroy(display.screens[i]->xdg_output);
+		if (display.screens[i]->output)
+			wl_output_destroy(display.screens[i]->output);
+	}
+
+	if (display.xdg_output_manager)
+		zxdg_output_manager_v1_destroy(display.xdg_output_manager);
 
 	if (display.display) {
 		wl_display_flush(display.display);

@@ -12,6 +12,7 @@ source_files = [
 
 wayland_protocols = [
     "stable/xdg-shell/xdg-shell.xml",
+    "unstable/xdg-output/xdg-output-unstable-v1.xml",
 ]
 
 objects = []

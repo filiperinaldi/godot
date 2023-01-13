@@ -35,6 +35,7 @@
 
 #include "core/templates/local_vector.h"
 #include "servers/display_server.h"
+#include "xdg-output-unstable-v1.gen.h"
 #include "xdg-shell.gen.h"
 
 #if defined(GLES3_ENABLED)
@@ -42,6 +43,8 @@
 #include "egl_manager.h"
 #endif
 
+// Documentation specifies 72 when get DPI is not supported. Using it for errors as well
+#define INVALID_DPI 72
 
 class DisplayServerWayland : public DisplayServer {
 private:
@@ -53,6 +56,19 @@ private:
 	static void h_xdg_wm_base_ping(void *data, struct xdg_wm_base *xdg_wm_base, uint32_t serial);
 	static void h_xdg_surface_configure(void *data, struct xdg_surface *xdg_surface, uint32_t serial);
 	static void h_wl_buffer_release(void *data, struct wl_buffer *wl_buffer);
+	static void h_wl_output_geometry(void *data, struct wl_output *wl_output, int32_t x, int32_t y, int32_t physical_width, int32_t physical_height, int32_t subpixel, const char *make, const char *model, int32_t transform);
+	static void h_wl_output_mode(void *data, struct wl_output *wl_output, uint32_t flags, int32_t width, int32_t height, int32_t refresh);
+	static void h_wl_output_done(void *data, struct wl_output *wl_output);
+	static void h_wl_output_scale(void *data, struct wl_output *wl_output, int32_t factor);
+	static void h_wl_output_name(void *data, struct wl_output *wl_output, const char *name);
+	static void h_wl_output_description(void *data, struct wl_output *wl_output, const char *description);
+	static void h_xdg_output_logical_position(void *data, struct zxdg_output_v1 *zxdg_output_v1, int32_t x, int32_t y);
+	static void h_xdg_output_logical_size(void *data, struct zxdg_output_v1 *zxdg_output_v1, int32_t width, int32_t height);
+	static void h_xdg_output_done(void *data, struct zxdg_output_v1 *zxdg_output_v1);
+	static void h_xdg_output_name(void *data, struct zxdg_output_v1 *zxdg_output_v1, const char *name);
+	static void h_xdg_output_description(void *data, struct zxdg_output_v1 *zxdg_output_v1, const char *description);
+	static void h_wl_surface_enter(void *data, struct wl_surface *wl_surface, struct wl_output *output);
+	static void h_wl_surface_leave(void *data, struct wl_surface *wl_surface, struct wl_output *output);
 
 	// Wayland listeners
 	static constexpr struct wl_registry_listener registry_listener = {
@@ -72,6 +88,45 @@ private:
 		.release = h_wl_buffer_release,
 	};
 
+	static constexpr struct wl_output_listener wl_output_listener = {
+		.geometry = h_wl_output_geometry,
+		.mode = h_wl_output_mode,
+		.done = h_wl_output_done,
+		.scale = h_wl_output_scale,
+		.name = h_wl_output_name,
+		.description = h_wl_output_description,
+	};
+
+	static constexpr struct zxdg_output_v1_listener xdg_output_listener = {
+		.logical_position = h_xdg_output_logical_position,
+		.logical_size = h_xdg_output_logical_size,
+		.done = h_xdg_output_done,
+		.name = h_xdg_output_name,
+		.description = h_xdg_output_description,
+	};
+
+	static constexpr struct wl_surface_listener wl_surface_listener = {
+		.enter = h_wl_surface_enter,
+		.leave = h_wl_surface_leave,
+	};
+
+	struct WScreen {
+		uint32_t output_name = 0;
+		struct wl_output *output = nullptr;
+		struct zxdg_output_v1 *xdg_output = nullptr;
+		bool pending_update = true;
+		Point2i position = Point2();
+		Size2i size_mm = Size2i();
+		Size2i size_px = Size2i();
+		Point2i logical_position = Point2();
+		Size2i logical_size_px = Size2i();
+		int32_t transform = 0;
+		int32_t flags = 0;
+		int32_t refresh_mHz = 0;
+		float scale_factor = 0;
+		int dpi = INVALID_DPI;
+	};
+
 	// Wayland related context
 	struct WDisplay {
 		int fd;
@@ -80,12 +135,15 @@ private:
 		struct wl_registry *registry = nullptr;
 		struct wl_shm *shm = nullptr;
 		struct xdg_wm_base *xdg_wm_base = nullptr;
+		struct zxdg_output_manager_v1 *xdg_output_manager = nullptr;
+		LocalVector<WScreen *> screens;
 #if defined(GLES3_ENABLED)
 		EGLManager *egl_manager = nullptr;
 #endif
 	} display;
 
 	struct WWindow {
+		LocalVector<struct wl_output *>outputs;
 		WindowMode mode;
 		VSyncMode vsync_mode;
 		uint32_t flags;
@@ -109,6 +167,7 @@ private:
 
 	DisplayServer::WindowID _window_create(WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution);
 	void _window_destroy(WWindow *window);
+	WScreen *_get_screen_from_id(int p_screen) const;
 
 public:
 	static DisplayServer *create(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error);
@@ -124,15 +183,15 @@ public:
 	bool has_feature(Feature p_feature) const override;
 	void window_set_title(const String &p_title, WindowID p_window = MAIN_WINDOW_ID) override;
 	Size2i window_get_size(WindowID p_window = MAIN_WINDOW_ID) const override;
+	int screen_get_dpi(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
+	int get_screen_count() const override;
+	int get_primary_screen() const override;
+	Point2i screen_get_position(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
+	Size2i screen_get_size(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
+	Rect2i screen_get_usable_rect(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
+	float screen_get_refresh_rate(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 
 	/* Not implemented yet */
-	int get_screen_count() const override { WARN_PRINT_ONCE("Not implemented"); return 0; }
-	int get_primary_screen() const override { WARN_PRINT_ONCE("Not implemented"); return 0; };
-	Point2i screen_get_position(int p_screen = SCREEN_OF_MAIN_WINDOW) const override { WARN_PRINT_ONCE("Not implemented"); return Point2i(); }
-	Size2i screen_get_size(int p_screen = SCREEN_OF_MAIN_WINDOW) const override { WARN_PRINT_ONCE("Not implemented"); return Size2i(); }
-	Rect2i screen_get_usable_rect(int p_screen = SCREEN_OF_MAIN_WINDOW) const override { WARN_PRINT_ONCE("Not implemented"); return Rect2i(); }
-	int screen_get_dpi(int p_screen = SCREEN_OF_MAIN_WINDOW) const override { WARN_PRINT_ONCE("Not implemented"); return 0; }
-	float screen_get_refresh_rate(int p_screen = SCREEN_OF_MAIN_WINDOW) const override { WARN_PRINT_ONCE("Not implemented"); return 0.0; }
 	WindowID get_window_at_screen_position(const Point2i &p_position) const override { WARN_PRINT_ONCE("Not implemented"); return 0; }
 	void window_attach_instance_id(ObjectID p_instance, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	ObjectID window_get_attached_instance_id(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return ObjectID(); }
