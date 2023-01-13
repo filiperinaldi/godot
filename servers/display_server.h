@@ -252,6 +252,7 @@ public:
 	virtual Rect2i get_display_safe_area() const { return screen_get_usable_rect(); }
 
 	enum {
+		SCREEN_UNKNOWN = -3,
 		SCREEN_PRIMARY = -2,
 		SCREEN_OF_MAIN_WINDOW = -1, // Note: for the main window, determine screen from position.
 	};

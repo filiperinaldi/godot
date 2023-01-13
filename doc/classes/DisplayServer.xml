@@ -1544,6 +1544,9 @@
 		<constant name="MOUSE_MODE_CONFINED_HIDDEN" value="4" enum="MouseMode">
 			Confines the mouse cursor to the game window, and make it hidden.
 		</constant>
+		<constant name="SCREEN_UNKNOWN" value="-3">
+			Represents an unknown screen. This is usually used in certain platforms as a return value in functions that are unable to determine a screen.
+		</constant>
 		<constant name="SCREEN_PRIMARY" value="-2">
 			Represents the primary screen.
 		</constant>
