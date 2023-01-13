@@ -1,14 +1,58 @@
 #!/usr/bin/env python
 
+import os
+import subprocess
+
 Import("env")
 
 source_files = [
     "display_server_wayland.cpp",
 ]
 
+wayland_protocols = [
+    "stable/xdg-shell/xdg-shell.xml",
+]
+
 objects = []
 
+
+# Check whether the wayland-scanner tool is available
+def wayland_check_tool():
+    scanner_error = os.system("wayland-scanner --version 2> /dev/null")
+    if scanner_error:
+        print("Error: wayland-scanner not found. Aborting.")
+        env.Exit(255)
+
+
+# Get root directory for the protocols
+def wayland_get_protocol_dir():
+    res = subprocess.run(["pkg-config", "wayland-protocols", "--variable=pkgdatadir"], capture_output=True, text=True)
+    if res.returncode != 0:
+        print("Error: Wayland-protocols not found. Aborting.")
+        env.Exit(255)
+
+    return res.stdout.strip()
+
+
+# Generate wayland headers and API files from XML specs
+def wayland_gen_file_from_proto(protocol):
+    xml_filename = os.path.basename(protocol)
+    h_filename = os.path.splitext(xml_filename)[0]+".gen.h"
+    c_filename = os.path.splitext(xml_filename)[0]+".gen.c"
+
+    env.Command(h_filename, protocol, "wayland-scanner client-header < $SOURCE > $TARGET")
+    env.Command(c_filename, protocol, "wayland-scanner private-code < $SOURCE > $TARGET")
+    objects.append(env.Object(c_filename))
+
+
+# Add generic source/objects
 for source_file in source_files:
     objects.append(env.Object(source_file))
+
+# Generate protocol artifacts
+wayland_check_tool()
+protocol_dir = wayland_get_protocol_dir()
+for protocol in wayland_protocols:
+    wayland_gen_file_from_proto(os.path.join(protocol_dir, protocol))
 
 Return("objects")
