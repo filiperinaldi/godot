@@ -43,6 +43,10 @@
 #include "x11/display_server_x11.h"
 #endif
 
+#ifdef WAYLAND_ENABLED
+#include "wayland/display_server_wayland.h"
+#endif
+
 #ifdef HAVE_MNTENT
 #include <mntent.h>
 #endif
@@ -1080,6 +1084,9 @@ OS_LinuxBSD::OS_LinuxBSD() {
 
 #ifdef X11_ENABLED
 	DisplayServerX11::register_x11_driver();
+#endif
+#ifdef WAYLAND_ENABLED
+	DisplayServerWayland::register_driver();
 #endif
 
 #ifdef FONTCONFIG_ENABLED

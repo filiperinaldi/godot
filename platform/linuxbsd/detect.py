@@ -50,6 +50,7 @@ def get_opts():
         BoolVariable("fontconfig", "Use fontconfig for system fonts support", True),
         BoolVariable("udev", "Use udev for gamepad connection callbacks", True),
         BoolVariable("x11", "Enable X11 display", True),
+        BoolVariable("wayland", "Enable Wayland display", True),
         BoolVariable("touch", "Enable touch events", True),
         BoolVariable("execinfo", "Use libexecinfo on systems where glibc is not available", False),
     ]
@@ -184,6 +185,9 @@ def configure(env: "Environment"):
 
     ## Dependencies
 
+    if env["wayland"]:
+        env.ParseConfig("pkg-config wayland-client --cflags --libs")
+
     if env["touch"]:
         env.Append(CPPDEFINES=["TOUCH_ENABLED"])
 
@@ -310,6 +314,9 @@ def configure(env: "Environment"):
 
     if env["x11"]:
         env.Append(CPPDEFINES=["X11_ENABLED"])
+
+    if env["wayland"]:
+        env.Append(CPPDEFINES=["WAYLAND_ENABLED"])
 
     if env["vulkan"]:
         env.Append(CPPDEFINES=["VULKAN_ENABLED"])
