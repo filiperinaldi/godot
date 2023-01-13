@@ -187,6 +187,7 @@ def configure(env: "Environment"):
 
     if env["wayland"]:
         env.ParseConfig("pkg-config wayland-client --cflags --libs")
+        env.ParseConfig("pkg-config pkg-config wayland-egl egl --cflags --libs")
 
     if env["touch"]:
         env.Append(CPPDEFINES=["TOUCH_ENABLED"])

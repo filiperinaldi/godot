@@ -7,6 +7,7 @@ Import("env")
 
 source_files = [
     "display_server_wayland.cpp",
+    "egl_manager.cpp",
 ]
 
 wayland_protocols = [

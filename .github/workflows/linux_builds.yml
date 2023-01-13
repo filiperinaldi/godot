@@ -84,7 +84,7 @@ jobs:
           # The actual dependencies
           sudo apt-get install build-essential pkg-config libgl1-mesa-dev libglu-dev \
               xvfb wget unzip llvm \
-              libwayland-client libwayland-dev wayland-protocols
+              libwayland-client libwayland-dev wayland-protocols libegl-dev libwayland-egl-backend-dev \
 
       - name: Setup Godot build cache
         uses: ./.github/actions/godot-cache
