@@ -728,6 +728,31 @@ int DisplayServerWayland::window_get_current_screen(WindowID p_window) const {
 	return _get_screen_id_from_window(w);
 }
 
+bool DisplayServerWayland::window_can_draw(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	// Update mechanism for window->can_draw not implemented
+	WARN_PRINT_ONCE("Not implemented");
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->can_draw : false;
+}
+
+bool DisplayServerWayland::can_any_window_draw() const {
+	_THREAD_SAFE_METHOD_
+
+	// Update mechanism for window->can_draw not implemented
+	WARN_PRINT_ONCE("Not implemented");
+	bool can_draw = false;
+	for (int i = 0; i < windows.size(); i++) {
+		if (windows[i]->can_draw) {
+			can_draw = true;
+			break;
+		}
+	}
+
+	return can_draw;
+}
+
 void DisplayServerWayland::window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window) {
 	_THREAD_SAFE_METHOD_
 

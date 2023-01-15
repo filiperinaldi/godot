@@ -162,6 +162,7 @@ private:
 	struct WWindow {
 		ObjectID instance_id;
 		LocalVector<struct wl_output *>outputs;
+		bool can_draw = true;
 		WindowMode mode;
 		VSyncMode vsync_mode;
 		uint32_t flags;
@@ -228,6 +229,8 @@ public:
 	void window_set_mode(WindowMode p_mode, WindowID p_window = MAIN_WINDOW_ID) override;
 	WindowMode window_get_mode(WindowID p_window = MAIN_WINDOW_ID) const override;
 	int window_get_current_screen(WindowID p_window = MAIN_WINDOW_ID) const override;
+	bool window_can_draw(WindowID p_window = MAIN_WINDOW_ID) const override;
+	bool can_any_window_draw() const override;
 	void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
 
 	/* Not implemented yet */
@@ -246,8 +249,6 @@ public:
 	bool window_get_flag(WindowFlags p_flag, WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return false; }
 	void window_request_attention(WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_move_to_foreground(WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	bool window_can_draw(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return true; }
-	bool can_any_window_draw() const override { WARN_PRINT_ONCE("Not implemented"); return true; }
 	void process_events() override;
 };
 
