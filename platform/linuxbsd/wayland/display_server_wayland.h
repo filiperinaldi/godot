@@ -160,6 +160,7 @@ private:
 	} display;
 
 	struct WWindow {
+		ObjectID instance_id;
 		LocalVector<struct wl_output *>outputs;
 		WindowMode mode;
 		VSyncMode vsync_mode;
@@ -215,6 +216,8 @@ public:
 	Size2i screen_get_size(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	Rect2i screen_get_usable_rect(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	float screen_get_refresh_rate(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
+	void window_attach_instance_id(ObjectID p_instance, WindowID p_window = MAIN_WINDOW_ID) override;
+	ObjectID window_get_attached_instance_id(WindowID p_window = MAIN_WINDOW_ID) const override;
 	void window_set_max_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
 	void window_set_min_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
 	void window_set_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
@@ -229,8 +232,6 @@ public:
 
 	/* Not implemented yet */
 	WindowID get_window_at_screen_position(const Point2i &p_position) const override { WARN_PRINT_ONCE("Not implemented"); return 0; }
-	void window_attach_instance_id(ObjectID p_instance, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	ObjectID window_get_attached_instance_id(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return ObjectID(); }
 	void window_set_window_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_input_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_input_text_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }

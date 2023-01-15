@@ -586,6 +586,21 @@ float DisplayServerWayland::screen_get_refresh_rate(int p_screen) const  {
 	return !s ? -1 : float(s->refresh_mHz) / 1000.0;
 }
 
+void DisplayServerWayland::window_attach_instance_id(ObjectID p_instance, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	if (w)
+		w->instance_id = p_instance;
+}
+
+ObjectID DisplayServerWayland::window_get_attached_instance_id(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->instance_id : ObjectID();
+}
+
 void DisplayServerWayland::window_set_min_size(const Size2i p_size, WindowID p_window) {
 	_THREAD_SAFE_METHOD_
 
