@@ -192,6 +192,7 @@ private:
 	WScreen *_get_screen_from_id(int p_screen) const;
 	WWindow *_get_window_from_id(int p_window) const;
 	static void _window_set_size(WWindow *window, Size2i size);
+	void _window_set_mode(WindowMode p_mode, WWindow *window);
 
 public:
 	static DisplayServer *create(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error);
@@ -220,6 +221,8 @@ public:
 	Size2i window_get_min_size(WindowID p_window = MAIN_WINDOW_ID) const override;
 	Size2i window_get_size(WindowID p_window = MAIN_WINDOW_ID) const override;
 	Size2i window_get_size_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override;
+	void window_set_mode(WindowMode p_mode, WindowID p_window = MAIN_WINDOW_ID) override;
+	WindowMode window_get_mode(WindowID p_window = MAIN_WINDOW_ID) const override;
 	void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
 
 	/* Not implemented yet */
@@ -236,8 +239,6 @@ public:
 	Point2i window_get_position_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return Point2i(); }
 	void window_set_position(const Point2i &p_position, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_transient(WindowID p_window, WindowID p_parent) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	void window_set_mode(WindowMode p_mode, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	WindowMode window_get_mode(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return WINDOW_MODE_WINDOWED; }
 	bool window_is_maximize_allowed(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return false; }
 	void window_set_flag(WindowFlags p_flag, bool p_enabled, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	bool window_get_flag(WindowFlags p_flag, WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return false; }

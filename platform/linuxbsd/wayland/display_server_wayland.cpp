@@ -276,7 +276,6 @@ DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, 
 	WWindow *w = memnew(WWindow);
 	ERR_FAIL_NULL_V_MSG(w, INVALID_WINDOW_ID, "Wayland: Failed to allocate memory for window");
 
-	w->mode = p_mode;
 	w->flags = p_flags;
 	w->vsync_mode = p_vsync_mode;
 	w->size = p_resolution;
@@ -328,33 +327,13 @@ DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, 
 	}
 #endif
 
-	switch(p_mode) {
-	case WINDOW_MODE_WINDOWED:
-		break;
-
-	case WINDOW_MODE_MINIMIZED:
-		xdg_toplevel_set_minimized(w->xdg_toplevel);
-		break;
-
-	case WINDOW_MODE_MAXIMIZED:
-		DEBUG_LOG_WAYLAND("win create mode Maximised\n");
-		xdg_toplevel_set_maximized(w->xdg_toplevel);
-		break;
-
-	case WINDOW_MODE_FULLSCREEN:
-	case WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
-		xdg_toplevel_set_fullscreen(w->xdg_toplevel, nullptr);
-		break;
-
-	default:
-		DEBUG_LOG_WAYLAND("Unknown window mode\n");
-	}
-
 	WindowID id = windows.find(nullptr);
 	if (id < 0)
 		id = windows.size();
 	windows.insert(id, w);
 	current_window = w;
+
+	_window_set_mode(p_mode, w);
 
 	return id;
 }
@@ -679,6 +658,64 @@ Size2i DisplayServerWayland::window_get_size(WindowID p_window) const {
 
 Size2i DisplayServerWayland::window_get_size_with_decorations(WindowID p_window) const {
 	return window_get_size(p_window);
+}
+
+void DisplayServerWayland::window_set_mode(WindowMode p_mode, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	if (w)
+		_window_set_mode(p_mode, w);
+}
+
+void DisplayServerWayland::_window_set_mode(WindowMode p_mode, WWindow *window) {
+	if (p_mode == WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+		p_mode = WINDOW_MODE_FULLSCREEN;
+
+	if (window->mode == p_mode)
+		return;
+
+	bool is_fullscreen = window->mode == WINDOW_MODE_FULLSCREEN;
+	bool is_maximized = window->mode == WINDOW_MODE_MAXIMIZED;
+
+	switch(p_mode) {
+	case WINDOW_MODE_WINDOWED:
+		if (is_fullscreen)
+			xdg_toplevel_unset_fullscreen(window->xdg_toplevel);
+		else if (is_maximized)
+			xdg_toplevel_unset_maximized(window->xdg_toplevel);
+		break;
+
+	case WINDOW_MODE_MINIMIZED:
+		xdg_toplevel_set_minimized(window->xdg_toplevel);
+		break;
+
+	case WINDOW_MODE_MAXIMIZED:
+		if (is_fullscreen)
+			xdg_toplevel_unset_fullscreen(window->xdg_toplevel);
+		xdg_toplevel_set_maximized(window->xdg_toplevel);
+		break;
+
+	case WINDOW_MODE_FULLSCREEN:
+		xdg_toplevel_set_fullscreen(window->xdg_toplevel, nullptr);
+		break;
+
+	case WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+		/* Not supported in the core Wayland protocols */
+		CRASH_NOW_MSG("Wayland: Exclusive support not available");
+		break;
+
+	default:
+		DEBUG_LOG_WAYLAND("Unknown window mode\n");
+	}
+	window->mode = p_mode;
+}
+
+DisplayServer::WindowMode DisplayServerWayland::window_get_mode(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->mode : WINDOW_MODE_WINDOWED;
 }
 
 void DisplayServerWayland::window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window) {
