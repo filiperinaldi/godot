@@ -516,21 +516,9 @@ DisplayServerWayland::WScreen *DisplayServerWayland::_get_screen_from_id(int p_s
 		return nullptr;
 
 	if (p_screen == SCREEN_OF_MAIN_WINDOW) {
-		// Check if main window has assigned outputs
-		if (windows[MAIN_WINDOW_ID]->outputs.is_empty())
-			return nullptr;
+		p_screen = _get_screen_id_from_window(windows[MAIN_WINDOW_ID]);
 
-		// A window can span multiple screens. Pick the "earliest" screen a
-		// window has entered.
-		p_screen = -1;
-		for (unsigned int i = 0; i < display.screens.size(); i++) {
-			if (display.screens[i]->output == windows[MAIN_WINDOW_ID]->outputs[0]) {
-				p_screen = i;
-				break;
-			}
-		}
-
-		return p_screen == -1 ? nullptr : display.screens[p_screen];
+		return p_screen == SCREEN_UNKNOWN ? nullptr : display.screens[p_screen];
 	}
 
 	if ((p_screen < 0) || (p_screen >= display.screens.size()))
@@ -716,6 +704,13 @@ DisplayServer::WindowMode DisplayServerWayland::window_get_mode(WindowID p_windo
 
 	WWindow *w = _get_window_from_id(p_window);
 	return w ? w->mode : WINDOW_MODE_WINDOWED;
+}
+
+int DisplayServerWayland::window_get_current_screen(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	return _get_screen_id_from_window(w);
 }
 
 void DisplayServerWayland::window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window) {
