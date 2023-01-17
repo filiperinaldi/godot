@@ -753,6 +753,15 @@ bool DisplayServerWayland::can_any_window_draw() const {
 	return can_draw;
 }
 
+bool DisplayServerWayland::window_is_maximize_allowed(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	// Update mechanism for window->can_maximize not implemented
+	WARN_PRINT_ONCE("Not implemented");
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->can_maximize : false;
+}
+
 void DisplayServerWayland::window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window) {
 	_THREAD_SAFE_METHOD_
 
