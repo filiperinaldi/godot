@@ -166,7 +166,7 @@ private:
 		bool can_maximize = true;
 		WindowMode mode;
 		VSyncMode vsync_mode;
-		uint32_t flags;
+		uint32_t flags = 0;
 		//Vector2i position;
 		Vector2i resolution;
 		Size2i size;
@@ -197,6 +197,7 @@ private:
 	static void _window_set_size(WWindow *window, Size2i size);
 	void _window_set_mode(WindowMode p_mode, WWindow *window);
 	int _get_screen_id_from_window(const WWindow *window) const;
+	void _window_set_flag(WWindow *window, WindowFlags p_flag, bool p_enabled);
 
 public:
 	static DisplayServer *create(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error);
@@ -233,6 +234,8 @@ public:
 	bool window_can_draw(WindowID p_window = MAIN_WINDOW_ID) const override;
 	bool can_any_window_draw() const override;
 	bool window_is_maximize_allowed(WindowID p_window = MAIN_WINDOW_ID) const override;
+	void window_set_flag(WindowFlags p_flag, bool p_enabled, WindowID p_window = MAIN_WINDOW_ID) override;
+	bool window_get_flag(WindowFlags p_flag, WindowID p_window = MAIN_WINDOW_ID) const override;
 	void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
 
 	/* Not implemented yet */
@@ -246,8 +249,6 @@ public:
 	Point2i window_get_position_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return Point2i(); }
 	void window_set_position(const Point2i &p_position, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_transient(WindowID p_window, WindowID p_parent) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	void window_set_flag(WindowFlags p_flag, bool p_enabled, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	bool window_get_flag(WindowFlags p_flag, WindowID p_window = MAIN_WINDOW_ID) const override { WARN_PRINT_ONCE("Not implemented"); return false; }
 	void window_request_attention(WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_move_to_foreground(WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void process_events() override;

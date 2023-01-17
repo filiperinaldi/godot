@@ -527,6 +527,33 @@ DisplayServerWayland::WScreen *DisplayServerWayland::_get_screen_from_id(int p_s
 		return display.screens[p_screen];
 }
 
+void DisplayServerWayland::_window_set_flag(WWindow *window, WindowFlags p_flag, bool p_enabled) {
+	if (!window)
+		return;
+
+	WARN_PRINT_ONCE("Not implemented");
+
+	switch (p_flag) {
+	case WINDOW_FLAG_RESIZE_DISABLED:
+	case WINDOW_FLAG_BORDERLESS:
+	case WINDOW_FLAG_ALWAYS_ON_TOP:
+	case WINDOW_FLAG_TRANSPARENT:
+	case WINDOW_FLAG_NO_FOCUS:
+	case WINDOW_FLAG_POPUP:
+	case WINDOW_FLAG_EXTEND_TO_TITLE:
+	case WINDOW_FLAG_MOUSE_PASSTHROUGH:
+		if (p_enabled) {
+			window->flags |= (1 << p_flag);
+		} else {
+			window->flags &= ~(1 << p_flag);
+		}
+		break;
+
+	case WINDOW_FLAG_MAX:
+		break;
+	}
+}
+
 int DisplayServerWayland::screen_get_dpi(int p_screen) const {
 	_THREAD_SAFE_METHOD_
 
@@ -760,6 +787,20 @@ bool DisplayServerWayland::window_is_maximize_allowed(WindowID p_window) const {
 	WARN_PRINT_ONCE("Not implemented");
 	WWindow *w = _get_window_from_id(p_window);
 	return w ? w->can_maximize : false;
+}
+
+void DisplayServerWayland::window_set_flag(WindowFlags p_flag, bool p_enabled, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	_window_set_flag(w, p_flag, p_enabled);
+}
+
+bool DisplayServerWayland::window_get_flag(WindowFlags p_flag, WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	return w ? w->flags & (1 << p_flag) : false;
 }
 
 void DisplayServerWayland::window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window) {
