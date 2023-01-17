@@ -166,7 +166,7 @@ private:
 		WindowMode mode;
 		VSyncMode vsync_mode;
 		uint32_t flags;
-		Vector2i position;
+		//Vector2i position;
 		Vector2i resolution;
 		Size2i size;
 		Size2i size_min = Size2i(1, 1);
