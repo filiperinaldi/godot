@@ -80,6 +80,17 @@ private:
 	static void h_xdg_toplevel_configure(void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height, struct wl_array *states);
 	static void h_xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel);
 	static void h_xdg_toplevel_configure_bounds(void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height);
+	static void h_wl_seat_capabilities(void *data, struct wl_seat *wl_seat, uint32_t capabilities);
+	static void h_wl_seat_name(void *data, struct wl_seat *wl_seat, const char *name);
+	static void h_wl_pointer_enter(void *data, struct wl_pointer *wl_pointer, uint32_t serial, struct wl_surface *surface, wl_fixed_t surface_x, wl_fixed_t surface_y);
+	static void h_wl_pointer_leave(void *data, struct wl_pointer *wl_pointer, uint32_t serial, struct wl_surface *surface);
+	static void h_wl_pointer_motion(void *data, struct wl_pointer *wl_pointer, uint32_t time, wl_fixed_t surface_x, wl_fixed_t surface_y);
+	static void h_wl_pointer_button(void *data, struct wl_pointer *wl_pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t state);
+	static void h_wl_pointer_axis(void *data, struct wl_pointer *wl_pointer, uint32_t time, uint32_t axis, wl_fixed_t value);
+	static void h_wl_pointer_frame(void *data, struct wl_pointer *wl_pointer);
+	static void h_wl_pointer_axis_source(void *data, struct wl_pointer *wl_pointer, uint32_t axis_source);
+	static void h_wl_pointer_axis_stop(void *data, struct wl_pointer *wl_pointer, uint32_t time, uint32_t axis);
+	static void h_wl_pointer_axis_discrete(void *data, struct wl_pointer *wl_pointer, uint32_t axis, int32_t discrete);
 
 	// Wayland listeners
 	static constexpr struct wl_registry_listener registry_listener = {
@@ -127,6 +138,43 @@ private:
 		.configure_bounds = h_xdg_toplevel_configure_bounds,
 	};
 
+	static constexpr struct wl_seat_listener wl_seat_listener = {
+		.capabilities = h_wl_seat_capabilities,
+		.name = h_wl_seat_name,
+	};
+
+	static constexpr struct wl_pointer_listener wl_pointer_listener = {
+		.enter = h_wl_pointer_enter,
+		.leave = h_wl_pointer_leave,
+		.motion = h_wl_pointer_motion,
+		.button = h_wl_pointer_button,
+		.axis = h_wl_pointer_axis,
+		.frame = h_wl_pointer_frame,
+		.axis_source = h_wl_pointer_axis_source,
+		.axis_stop = h_wl_pointer_axis_stop,
+		.axis_discrete = h_wl_pointer_axis_discrete,
+	};
+
+	struct WPointerEvent {
+		enum attrs {
+			WPOINTER_EVENT_HAS_ENTER = (1<<0),
+			WPOINTER_EVENT_HAS_LEAVE = (1<<1),
+			WPOINTER_EVENT_HAS_MOTION = (1<<2),
+		};
+		uint32_t attr = 0;
+
+		wl_fixed_t motion_x = 0;
+		wl_fixed_t motion_y = 0;
+		uint32_t motion_time = 0;
+
+		wl_surface *enter_surface = nullptr;
+		uint32_t enter_serial = 0;
+		wl_fixed_t enter_x = 0;
+		wl_fixed_t enter_y = 0;
+
+		wl_surface *leave_surface = nullptr;
+	};
+
 	struct WScreen {
 		uint32_t output_name = 0;
 		struct wl_output *output = nullptr;
@@ -151,9 +199,12 @@ private:
 		struct wl_compositor *compositor = nullptr;
 		struct wl_registry *registry = nullptr;
 		struct wl_shm *shm = nullptr;
+		struct wl_seat *seat = nullptr;
+		struct wl_pointer *pointer = nullptr;
 		struct xdg_wm_base *xdg_wm_base = nullptr;
 		struct zxdg_output_manager_v1 *xdg_output_manager = nullptr;
 		LocalVector<WScreen *> screens;
+		WPointerEvent pointer_event;
 #if defined(GLES3_ENABLED)
 		EGLManager *egl_manager = nullptr;
 #endif
@@ -175,6 +226,7 @@ private:
 		Size2i bounds; // Define max recommended screen size a window can occupy
 
 		Callable rect_changed_callback;
+		Callable input_event_callback;
 
 		// Wayland related
 		struct wl_surface *wl_surface = nullptr;
@@ -194,10 +246,14 @@ private:
 	void _window_destroy(WWindow *window);
 	WScreen *_get_screen_from_id(int p_screen) const;
 	WWindow *_get_window_from_id(int p_window) const;
+	WWindow *_get_window_from_surface(wl_surface *surface) const;
 	static void _window_set_size(WWindow *window, Size2i size);
 	void _window_set_mode(WindowMode p_mode, WWindow *window);
 	int _get_screen_id_from_window(const WWindow *window) const;
 	void _window_set_flag(WWindow *window, WindowFlags p_flag, bool p_enabled);
+
+	static void _dispatch_input_events(const Ref<InputEvent> &p_event);
+	void _dispatch_input_event(const Ref<InputEvent> &p_event);
 
 public:
 	static DisplayServer *create(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error);
@@ -237,11 +293,11 @@ public:
 	void window_set_flag(WindowFlags p_flag, bool p_enabled, WindowID p_window = MAIN_WINDOW_ID) override;
 	bool window_get_flag(WindowFlags p_flag, WindowID p_window = MAIN_WINDOW_ID) const override;
 	void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
+	void window_set_input_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
 
 	/* Not implemented yet */
 	WindowID get_window_at_screen_position(const Point2i &p_position) const override { WARN_PRINT_ONCE("Not implemented"); return 0; }
 	void window_set_window_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
-	void window_set_input_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_input_text_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_drop_files_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_current_screen(int p_screen, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }

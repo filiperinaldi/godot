@@ -83,6 +83,11 @@ void DisplayServerWayland::h_wl_global_registry_global(void *data, struct wl_reg
 		display->shm = (struct wl_shm *)wl_registry_bind(registry,
 			name, &wl_shm_interface, MIN(version, wl_shm_interface.version));
 
+	} else if (strcmp(interface, wl_seat_interface.name) == 0) {
+		display->seat = (struct wl_seat *)wl_registry_bind(registry,
+			name, &wl_seat_interface, MIN(version, wl_seat_interface.version));
+		wl_seat_add_listener(display->seat, &wl_seat_listener, display);
+
 	} else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
 		display->xdg_wm_base = (struct xdg_wm_base *)wl_registry_bind(registry,
 			name, &xdg_wm_base_interface, MIN(version, xdg_wm_base_interface.version));
@@ -272,6 +277,113 @@ void DisplayServerWayland::h_xdg_toplevel_configure_bounds(void *data, struct xd
 	}
 }
 
+void DisplayServerWayland::h_wl_seat_capabilities(void *data, struct wl_seat *wl_seat, uint32_t capabilities) {
+	WDisplay *display = (WDisplay *)data;
+
+	DEBUG_LOG_WAYLAND("Seat capabilities: %d\n", capabilities);
+
+	if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
+		if (!display->pointer) {
+			display->pointer = wl_seat_get_pointer(display->seat);
+			wl_pointer_add_listener(display->pointer, &wl_pointer_listener, display);
+		}
+	} else {
+		if (display->pointer) {
+			wl_pointer_release(display->pointer);
+			display->pointer = nullptr;
+		}
+	}
+}
+
+void DisplayServerWayland::h_wl_seat_name(void *data, struct wl_seat *wl_seat, const char *name) {
+	DEBUG_LOG_WAYLAND("Using seat named '%s'\n", name);
+}
+
+void DisplayServerWayland::h_wl_pointer_enter(void *data, struct wl_pointer *wl_pointer, uint32_t serial, struct wl_surface *surface, wl_fixed_t surface_x, wl_fixed_t surface_y) {
+	WDisplay *display = (WDisplay *)data;
+
+	struct WPointerEvent &pe = display->pointer_event;
+
+	pe.attr |= WPointerEvent::attrs::WPOINTER_EVENT_HAS_ENTER;
+	pe.enter_surface = surface;
+	pe.enter_serial = serial;
+	pe.enter_x = surface_x;
+	pe.enter_y = surface_y;
+}
+
+void DisplayServerWayland::h_wl_pointer_leave(void *data, struct wl_pointer *wl_pointer, uint32_t serial, struct wl_surface *surface) {
+	WDisplay *display = (WDisplay *)data;
+
+	struct WPointerEvent &pe = display->pointer_event;
+
+	pe.attr |= WPointerEvent::attrs::WPOINTER_EVENT_HAS_LEAVE;
+	pe.leave_surface = surface;
+}
+
+void DisplayServerWayland::h_wl_pointer_motion(void *data, struct wl_pointer *wl_pointer, uint32_t time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
+	WDisplay *display = (WDisplay *)data;
+
+	struct WPointerEvent &pe = display->pointer_event;
+
+	pe.attr |= WPointerEvent::attrs::WPOINTER_EVENT_HAS_MOTION;
+	pe.motion_time = time;
+	pe.motion_x = surface_x;
+	pe.motion_y = surface_y;
+}
+
+void DisplayServerWayland::h_wl_pointer_button(void *data, struct wl_pointer *wl_pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
+	DEBUG_LOG_WAYLAND("Button, ");
+}
+
+void DisplayServerWayland::h_wl_pointer_axis(void *data, struct wl_pointer *wl_pointer, uint32_t time, uint32_t axis, wl_fixed_t value) {
+	DEBUG_LOG_WAYLAND("Axis, ");
+}
+
+void DisplayServerWayland::h_wl_pointer_frame(void *data, struct wl_pointer *wl_pointer) {
+	WDisplay *display = (WDisplay *)data;
+
+	struct WPointerEvent &pe = display->pointer_event;
+
+	if (pe.attr & WPointerEvent::attrs::WPOINTER_EVENT_HAS_LEAVE) {
+		// TODO: Clear pointer_focus
+	}
+
+	if (pe.attr & WPointerEvent::attrs::WPOINTER_EVENT_HAS_ENTER) {
+		Vector2 pos = Vector2(wl_fixed_to_int(pe.enter_x), wl_fixed_to_int(pe.enter_y));
+		Input::get_singleton()->set_mouse_position(pos);
+		//TODO: pointer_focus = _window_id_from_surface(enter_surface)
+	}
+
+	if (pe.attr & WPointerEvent::attrs::WPOINTER_EVENT_HAS_MOTION) {
+		Ref<InputEventMouseMotion> mm;
+		mm.instantiate();
+
+		mm->set_window_id(DisplayServer::MAIN_WINDOW_ID);
+
+		Vector2 pos = Vector2(wl_fixed_to_int(pe.motion_x), wl_fixed_to_int(pe.motion_y));
+		mm->set_position(pos);
+		mm->set_global_position(pos);
+
+		Input::get_singleton()->set_mouse_position(pos);
+		Input::get_singleton()->parse_input_event(mm);
+		DEBUG_LOG_WAYLAND("Motion %f, %f\n", pos.x, pos.y);
+	}
+
+	memset(&pe, 0, sizeof(pe));
+}
+
+void DisplayServerWayland::h_wl_pointer_axis_source(void *data, struct wl_pointer *wl_pointer, uint32_t axis_source) {
+
+}
+
+void DisplayServerWayland::h_wl_pointer_axis_stop(void *data, struct wl_pointer *wl_pointer, uint32_t time, uint32_t axis) {
+
+}
+
+void DisplayServerWayland::h_wl_pointer_axis_discrete(void *data, struct wl_pointer *wl_pointer, uint32_t axis, int32_t discrete) {
+
+}
+
 DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution) {
 	WWindow *w = memnew(WWindow);
 	ERR_FAIL_NULL_V_MSG(w, INVALID_WINDOW_ID, "Wayland: Failed to allocate memory for window");
@@ -366,6 +478,19 @@ DisplayServerWayland::WWindow *DisplayServerWayland::_get_window_from_id(int p_w
 	}
 }
 
+DisplayServerWayland::WWindow *DisplayServerWayland::_get_window_from_surface(wl_surface *surface) const {
+	WWindow *w = nullptr;
+
+	for (unsigned int i = 0; i < windows.size(); i++) {
+		if (windows[i] && windows[i]->wl_surface == surface) {
+			w = windows[i];
+			break;
+		}
+	}
+
+	return w;
+}
+
 void DisplayServerWayland::_window_set_size(WWindow *window, Size2i size) {
 	if ((size.width <= 0) || (size.height <= 0))
 		return;
@@ -414,6 +539,7 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 	ERR_FAIL_NULL_MSG(display.compositor, "Wayland: Failed to acquire compositor");
 	ERR_FAIL_NULL_MSG(display.xdg_wm_base, "Wayland: Failed to acquire xdg_wm_base");
 	ERR_FAIL_NULL_MSG(display.xdg_output_manager, "Wayland: Failed to acquire xdg_output_manager");
+	ERR_FAIL_NULL_MSG(display.seat, "Wayland: Failed to acquire seat");
 
 #if defined(GLES3_ENABLED)
 	if (p_rendering_driver == "opengl3") {
@@ -426,6 +552,8 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 #endif
 
 	wl_display_roundtrip(display.display);
+
+	Input::get_singleton()->set_event_dispatch_function(_dispatch_input_events);
 
 	DEBUG_LOG_WAYLAND("Creating main window...\n");
 	WindowID window_id = _window_create(p_mode, p_vsync_mode, p_flags, p_position, p_resolution);
@@ -552,6 +680,14 @@ void DisplayServerWayland::_window_set_flag(WWindow *window, WindowFlags p_flag,
 	case WINDOW_FLAG_MAX:
 		break;
 	}
+}
+
+void DisplayServerWayland::_dispatch_input_events(const Ref<InputEvent> &p_event) {
+	static_cast<DisplayServerWayland *>(get_singleton())->_dispatch_input_event(p_event);
+}
+
+void DisplayServerWayland::_dispatch_input_event(const Ref<InputEvent> &p_event) {
+
 }
 
 int DisplayServerWayland::screen_get_dpi(int p_screen) const {
@@ -809,6 +945,15 @@ void DisplayServerWayland::window_set_rect_changed_callback(const Callable &p_ca
 	WWindow *w = _get_window_from_id(p_window);
 	if (w) {
 		w->rect_changed_callback = p_callable;
+	}
+}
+
+void DisplayServerWayland::window_set_input_event_callback(const Callable &p_callable, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	WWindow *w = _get_window_from_id(p_window);
+	if (w) {
+		w->input_event_callback = p_callable;
 	}
 }
 
