@@ -227,6 +227,7 @@ private:
 
 		Callable rect_changed_callback;
 		Callable input_event_callback;
+		Callable window_event_callback;
 
 		// Wayland related
 		struct wl_surface *wl_surface = nullptr;
@@ -251,6 +252,7 @@ private:
 	void _window_set_mode(WindowMode p_mode, WWindow *window);
 	int _get_screen_id_from_window(const WWindow *window) const;
 	void _window_set_flag(WWindow *window, WindowFlags p_flag, bool p_enabled);
+	void _send_window_event(const WWindow *window, WindowEvent p_event);
 
 	static void _dispatch_input_events(const Ref<InputEvent> &p_event);
 	void _dispatch_input_event(const Ref<InputEvent> &p_event);
@@ -294,10 +296,10 @@ public:
 	bool window_get_flag(WindowFlags p_flag, WindowID p_window = MAIN_WINDOW_ID) const override;
 	void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
 	void window_set_input_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
+	void window_set_window_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
 
 	/* Not implemented yet */
 	WindowID get_window_at_screen_position(const Point2i &p_position) const override { WARN_PRINT_ONCE("Not implemented"); return 0; }
-	void window_set_window_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_input_text_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_drop_files_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }
 	void window_set_current_screen(int p_screen, WindowID p_window = MAIN_WINDOW_ID) override { WARN_PRINT_ONCE("Not implemented"); return; }

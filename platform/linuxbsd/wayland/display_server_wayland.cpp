@@ -690,6 +690,16 @@ void DisplayServerWayland::_dispatch_input_event(const Ref<InputEvent> &p_event)
 
 }
 
+void DisplayServerWayland::_send_window_event(const WWindow *window, WindowEvent p_event) {
+	if (window && !window->window_event_callback.is_null()) {
+		Variant event = int(p_event);
+		Variant *eventp = &event;
+		Variant ret;
+		Callable::CallError ce;
+		window->window_event_callback.callp((const Variant **)&eventp, 1, ret, ce);
+	}
+}
+
 int DisplayServerWayland::screen_get_dpi(int p_screen) const {
 	_THREAD_SAFE_METHOD_
 
@@ -954,6 +964,13 @@ void DisplayServerWayland::window_set_input_event_callback(const Callable &p_cal
 	WWindow *w = _get_window_from_id(p_window);
 	if (w) {
 		w->input_event_callback = p_callable;
+	}
+}
+
+void DisplayServerWayland::window_set_window_event_callback(const Callable &p_callable, WindowID p_window) {
+	WWindow *w = _get_window_from_id(p_window);
+	if (w) {
+		w->window_event_callback = p_callable;
 	}
 }
 
