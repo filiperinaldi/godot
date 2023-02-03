@@ -192,24 +192,6 @@ private:
 		int dpi = INVALID_DPI;
 	};
 
-	// Wayland related context
-	struct WDisplay {
-		int fd;
-		struct wl_display *display = nullptr;
-		struct wl_compositor *compositor = nullptr;
-		struct wl_registry *registry = nullptr;
-		struct wl_shm *shm = nullptr;
-		struct wl_seat *seat = nullptr;
-		struct wl_pointer *pointer = nullptr;
-		struct xdg_wm_base *xdg_wm_base = nullptr;
-		struct zxdg_output_manager_v1 *xdg_output_manager = nullptr;
-		LocalVector<WScreen *> screens;
-		WPointerEvent pointer_event;
-#if defined(GLES3_ENABLED)
-		EGLManager *egl_manager = nullptr;
-#endif
-	} display;
-
 	struct WWindow {
 		ObjectID instance_id;
 		LocalVector<struct wl_output *>outputs;
@@ -240,6 +222,25 @@ private:
 #endif
 	};
 
+	// Wayland related context
+	struct WDisplay {
+		int fd;
+		struct wl_display *display = nullptr;
+		struct wl_compositor *compositor = nullptr;
+		struct wl_registry *registry = nullptr;
+		struct wl_shm *shm = nullptr;
+		struct wl_seat *seat = nullptr;
+		struct wl_pointer *pointer = nullptr;
+		struct xdg_wm_base *xdg_wm_base = nullptr;
+		struct zxdg_output_manager_v1 *xdg_output_manager = nullptr;
+		LocalVector<WScreen *> screens;
+		WPointerEvent pointer_event;
+		WWindow *main_window = nullptr;
+#if defined(GLES3_ENABLED)
+		EGLManager *egl_manager = nullptr;
+#endif
+	} display;
+
 	WWindow *current_window = nullptr;
 	LocalVector<WWindow *> windows;
 
@@ -252,7 +253,7 @@ private:
 	void _window_set_mode(WindowMode p_mode, WWindow *window);
 	int _get_screen_id_from_window(const WWindow *window) const;
 	void _window_set_flag(WWindow *window, WindowFlags p_flag, bool p_enabled);
-	void _send_window_event(const WWindow *window, WindowEvent p_event);
+	static void _send_window_event(const WWindow *window, WindowEvent p_event);
 
 	static void _dispatch_input_events(const Ref<InputEvent> &p_event);
 	void _dispatch_input_event(const Ref<InputEvent> &p_event);

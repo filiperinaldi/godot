@@ -345,13 +345,15 @@ void DisplayServerWayland::h_wl_pointer_frame(void *data, struct wl_pointer *wl_
 	struct WPointerEvent &pe = display->pointer_event;
 
 	if (pe.attr & WPointerEvent::attrs::WPOINTER_EVENT_HAS_LEAVE) {
-		// TODO: Clear pointer_focus
+		//TODO: _window_from_surface(enter_surface)->has_focus = false;
+		_send_window_event(display->main_window, WINDOW_EVENT_MOUSE_EXIT);
 	}
 
 	if (pe.attr & WPointerEvent::attrs::WPOINTER_EVENT_HAS_ENTER) {
 		Vector2 pos = Vector2(wl_fixed_to_int(pe.enter_x), wl_fixed_to_int(pe.enter_y));
 		Input::get_singleton()->set_mouse_position(pos);
-		//TODO: pointer_focus = _window_id_from_surface(enter_surface)
+		_send_window_event(display->main_window, WINDOW_EVENT_MOUSE_ENTER);
+		//TODO: pointer_focus = _window_from_surface(enter_surface)->has_focus = true;
 	}
 
 	if (pe.attr & WPointerEvent::attrs::WPOINTER_EVENT_HAS_MOTION) {
@@ -363,6 +365,7 @@ void DisplayServerWayland::h_wl_pointer_frame(void *data, struct wl_pointer *wl_
 		Vector2 pos = Vector2(wl_fixed_to_int(pe.motion_x), wl_fixed_to_int(pe.motion_y));
 		mm->set_position(pos);
 		mm->set_global_position(pos);
+		mm->set_velocity(Input::get_singleton()->get_last_mouse_velocity());
 
 		Input::get_singleton()->set_mouse_position(pos);
 		Input::get_singleton()->parse_input_event(mm);
@@ -444,6 +447,7 @@ DisplayServer::WindowID DisplayServerWayland::_window_create(WindowMode p_mode, 
 		id = windows.size();
 	windows.insert(id, w);
 	current_window = w;
+	display.main_window = w;
 
 	_window_set_mode(p_mode, w);
 
@@ -697,6 +701,7 @@ void DisplayServerWayland::_send_window_event(const WWindow *window, WindowEvent
 		Variant ret;
 		Callable::CallError ce;
 		window->window_event_callback.callp((const Variant **)&eventp, 1, ret, ce);
+		DEBUG_LOG_WAYLAND("Sent win event %d\n", p_event);
 	}
 }
 
