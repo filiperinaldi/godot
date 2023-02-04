@@ -332,7 +332,16 @@ void DisplayServerWayland::h_wl_pointer_motion(void *data, struct wl_pointer *wl
 }
 
 void DisplayServerWayland::h_wl_pointer_button(void *data, struct wl_pointer *wl_pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
-	DEBUG_LOG_WAYLAND("Button, ");
+	WDisplay *display = (WDisplay *)data;
+
+	struct WPointerEvent &pe = display->pointer_event;
+
+	pe.attr |= WPointerEvent::attrs::WPOINTER_EVENT_HAS_BUTTON;
+
+	pe.button_serial = serial;
+	pe.button_time = time;
+	pe.button_code = button;
+	pe.button_state = state;
 }
 
 void DisplayServerWayland::h_wl_pointer_axis(void *data, struct wl_pointer *wl_pointer, uint32_t time, uint32_t axis, wl_fixed_t value) {
@@ -370,6 +379,14 @@ void DisplayServerWayland::h_wl_pointer_frame(void *data, struct wl_pointer *wl_
 		Input::get_singleton()->set_mouse_position(pos);
 		Input::get_singleton()->parse_input_event(mm);
 		DEBUG_LOG_WAYLAND("Motion %f, %f\n", pos.x, pos.y);
+	}
+
+	if (pe.attr & WPointerEvent::attrs::WPOINTER_EVENT_HAS_BUTTON) {
+		if (pe.button_state) {
+			//TODO: Remove, this is a test only
+			_send_window_event(display->main_window, WINDOW_EVENT_FOCUS_IN);
+			OS::get_singleton()->get_main_loop()->notification(MainLoop::NOTIFICATION_APPLICATION_FOCUS_IN);
+		}
 	}
 
 	memset(&pe, 0, sizeof(pe));

@@ -160,6 +160,7 @@ private:
 			WPOINTER_EVENT_HAS_ENTER = (1<<0),
 			WPOINTER_EVENT_HAS_LEAVE = (1<<1),
 			WPOINTER_EVENT_HAS_MOTION = (1<<2),
+			WPOINTER_EVENT_HAS_BUTTON = (1<<3),
 		};
 		uint32_t attr = 0;
 
@@ -173,6 +174,11 @@ private:
 		wl_fixed_t enter_y = 0;
 
 		wl_surface *leave_surface = nullptr;
+
+		uint32_t button_serial = 0;
+		uint32_t button_time = 0;
+		uint16_t button_code = 0;
+		uint32_t button_state = 0;
 	};
 
 	struct WScreen {
