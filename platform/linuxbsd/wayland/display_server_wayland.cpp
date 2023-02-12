@@ -96,6 +96,7 @@ void DisplayServerWayland::h_wl_global_registry_global(void *data, struct wl_reg
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
 		struct WScreen *screen = memnew(WScreen);
 		ERR_FAIL_NULL_MSG(screen, "Wayland: Failed to allocate screen");
+		DEBUG_LOG_WAYLAND("Registring screen %d \n", name);
 		screen->output_name = name;
 		screen->output = (struct wl_output *)wl_registry_bind(registry,
 			name, &wl_output_interface, MIN(version, wl_output_interface.version));
@@ -177,6 +178,7 @@ void DisplayServerWayland::h_wl_output_mode(void *data, struct wl_output *wl_out
 void DisplayServerWayland::h_wl_output_done(void *data, struct wl_output *wl_output) {
 	WScreen *screen = (WScreen *)data;
 	screen->pending_update = false;
+	DEBUG_LOG_WAYLAND("h_wl_output_done\n");
 }
 
 void DisplayServerWayland::h_wl_output_scale(void *data, struct wl_output *wl_output, int32_t factor) {
@@ -196,6 +198,7 @@ void DisplayServerWayland::h_xdg_output_logical_position(void *data, struct zxdg
 	screen->pending_update = true;
 	screen->logical_position.x = x;
 	screen->logical_position.y = y;
+	DEBUG_LOG_WAYLAND("h_xdg_output_logical_position\n");
 }
 
 void DisplayServerWayland::h_xdg_output_logical_size(void *data, struct zxdg_output_v1 *zxdg_output_v1, int32_t width, int32_t height) {
@@ -203,6 +206,7 @@ void DisplayServerWayland::h_xdg_output_logical_size(void *data, struct zxdg_out
 	screen->pending_update = true;
 	screen->logical_size_px.width = width;
 	screen->logical_size_px.height = height;
+	DEBUG_LOG_WAYLAND("h_xdg_output_logical_size\n");
 }
 
 
@@ -210,15 +214,20 @@ void DisplayServerWayland::h_xdg_output_done(void *data, struct zxdg_output_v1 *
 	WScreen *screen = (WScreen *)data;
 	screen->pending_update = false;
 
+	DEBUG_LOG_WAYLAND("h_xdg_output_done\n");
+
 	DEV_ASSERT(screen->size_mm.width && screen->size_mm.height);
 	screen->dpi = (((screen->logical_size_px.width / (float(screen->size_mm.width) / 25.4f)) +
 				  (screen->logical_size_px.height / (float(screen->size_mm.height) / 25.4f))) / 2.0);
+	DEBUG_LOG_WAYLAND("Calculated DPI %d\n", screen->dpi);
 }
 
 void DisplayServerWayland::h_xdg_output_name(void *data, struct zxdg_output_v1 *zxdg_output_v1, const char *name) {
+	DEBUG_LOG_WAYLAND("h_xdg_output_name\n");
 }
 
 void DisplayServerWayland::h_xdg_output_description(void *data, struct zxdg_output_v1 *zxdg_output_v1, const char *description) {
+	DEBUG_LOG_WAYLAND("h_xdg_output_desc\n");
 }
 
 void DisplayServerWayland::h_wl_surface_enter(void *data, struct wl_surface *wl_surface, struct wl_output *output) {
